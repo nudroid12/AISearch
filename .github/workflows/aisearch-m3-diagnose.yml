@@ -1,0 +1,113 @@
+name: AISearch M3 Diagnose
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+      - name: Set up Gradle 9.5.0
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.0"
+
+      - name: Diagnose build
+        shell: bash
+        run: |
+          set +e
+
+          gradle :app:assembleDebug \
+            --stacktrace \
+            --console=plain \
+            > full-build.log 2>&1
+
+          STATUS=$?
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          text = Path("full-build.log").read_text(
+              encoding="utf-8",
+              errors="replace"
+          )
+          lines = text.splitlines()
+
+          patterns = [
+              re.compile(r"\berror:", re.I),
+              re.compile(r"\be:", re.I),
+              re.compile(r"FAILURE:", re.I),
+              re.compile(r"What went wrong", re.I),
+              re.compile(r"Execution failed for task", re.I),
+              re.compile(r"Compilation error", re.I),
+              re.compile(r"Android resource linking failed", re.I),
+              re.compile(r"Unresolved reference", re.I),
+              re.compile(r"does not exist", re.I),
+              re.compile(r"cannot find symbol", re.I),
+              re.compile(r"Caused by:", re.I),
+          ]
+
+          hits = []
+          seen = set()
+
+          for i, line in enumerate(lines):
+              if any(p.search(line) for p in patterns):
+                  start = max(0, i - 3)
+                  end = min(len(lines), i + 7)
+                  block = "\n".join(lines[start:end]).strip()
+                  if block and block not in seen:
+                      seen.add(block)
+                      hits.append(block)
+
+          if hits:
+              summary = "\n\n---\n\n".join(hits[:20])
+          else:
+              summary = "\n".join(lines[-180:])
+
+          Path("m3-build-diagnose.txt").write_text(
+              "AISearch M3 BUILD DIAGNOSE\n"
+              "==========================\n\n"
+              + summary
+              + "\n",
+              encoding="utf-8"
+          )
+          PY
+
+          cat m3-build-diagnose.txt
+
+          exit "$STATUS"
+
+      - name: Upload concise diagnose
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AISearch-M3-diagnose
+          path: m3-build-diagnose.txt
+          if-no-files-found: error
