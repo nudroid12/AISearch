@@ -11,58 +11,61 @@ import java.util.Locale
 
 data class SearchReply(
     val text: String,
-    val usedWebSearch: Boolean
+    val sourceCount: Int
 )
 
 class GroqClient {
 
-    fun search(apiKey: String, query: String): SearchReply {
-        val connection =
-            URL("https://api.groq.com/openai/v1/chat/completions")
-                .openConnection() as HttpURLConnection
-
-        connection.requestMethod = "POST"
-        connection.connectTimeout = 15_000
-        connection.readTimeout = 60_000
-        connection.doOutput = true
-        connection.setRequestProperty(
-            "Authorization",
-            "Bearer $apiKey"
-        )
-        connection.setRequestProperty(
-            "Content-Type",
-            "application/json"
-        )
-        connection.setRequestProperty(
-            "Groq-Model-Version",
-            "latest"
-        )
-
+    fun answer(
+        apiKey: String,
+        searchBundle: WebSearchBundle
+    ): SearchReply {
         val today = SimpleDateFormat(
             "yyyy-MM-dd",
             Locale.US
         ).format(Date())
 
-        val systemPrompt = """
-            You are AISearch, a live web search assistant for a TV.
-            Current device date: $today.
+        val sourceText = buildString {
+            searchBundle.results.forEachIndexed { index, result ->
+                append("[SOURCE ${index + 1}]\n")
+                append("Title: ${result.title}\n")
+                append("URL: ${result.url}\n")
+                append("Content: ${result.content}\n\n")
+            }
+        }
 
-            Mandatory rules:
-            1. Use web_search before answering EVERY user query.
-            2. Never use model memory as the source for facts that may
-               have changed.
-            3. Current squads, people in roles, prices, schedules,
-               releases, news, weather, scores and availability must
-               be verified from current web results.
-            4. Prefer recent authoritative sources.
-            5. If current information cannot be verified, say so.
-            6. Keep answers concise and easy to read on a television.
+        val systemPrompt = """
+            You are AISearch, a concise TV search assistant.
+            Current date: $today.
+
+            The web search has already been performed for you.
+
+            STRICT RULES:
+            1. Answer using ONLY the supplied LIVE WEB SOURCES.
+            2. Do not use stored model knowledge to add current facts.
+            3. If the sources do not prove the answer, say:
+               "I cannot confirm this from the current search results."
+            4. For changing facts such as sports squads, office holders,
+               prices, schedules, scores, news and releases, prefer the
+               newest and most authoritative supplied source.
+            5. Never replace current source information with memory.
+            6. Keep the answer easy to read on a television.
             7. Reply in the user's language.
-            8. Include useful source links or citations when available.
+            8. End with a short Sources section containing only URLs
+               actually relied on.
+            9. Do not invent URLs or citations.
+        """.trimIndent()
+
+        val userPrompt = """
+            QUESTION:
+            ${searchBundle.query}
+
+            LIVE WEB SOURCES:
+            $sourceText
         """.trimIndent()
 
         val body = JSONObject().apply {
-            put("model", "groq/compound-mini")
+            put("model", "openai/gpt-oss-120b")
             put(
                 "messages",
                 JSONArray().apply {
@@ -75,28 +78,69 @@ class GroqClient {
                     put(
                         JSONObject().apply {
                             put("role", "user")
-                            put("content", query)
+                            put("content", userPrompt)
                         }
                     )
                 }
             )
-            put(
-                "compound_custom",
-                JSONObject().apply {
-                    put(
-                        "tools",
-                        JSONObject().apply {
-                            put(
-                                "enabled_tools",
-                                JSONArray().apply {
-                                    put("web_search")
-                                }
-                            )
-                        }
-                    )
-                }
-            )
+            put("temperature", 0.1)
+            put("max_completion_tokens", 900)
         }
+
+        return requestWithTransientRetry(
+            apiKey = apiKey,
+            body = body,
+            sourceCount = searchBundle.results.size
+        )
+    }
+
+    private fun requestWithTransientRetry(
+        apiKey: String,
+        body: JSONObject,
+        sourceCount: Int
+    ): SearchReply {
+        var lastError: Exception? = null
+
+        repeat(2) { attempt ->
+            try {
+                return requestOnce(
+                    apiKey = apiKey,
+                    body = body,
+                    sourceCount = sourceCount
+                )
+            } catch (error: RetryableGroqException) {
+                lastError = error
+                if (attempt == 0) {
+                    Thread.sleep(error.retryAfterMs)
+                }
+            }
+        }
+
+        throw lastError
+            ?: IllegalStateException("Groq request failed.")
+    }
+
+    private fun requestOnce(
+        apiKey: String,
+        body: JSONObject,
+        sourceCount: Int
+    ): SearchReply {
+        val connection =
+            URL("https://api.groq.com/openai/v1/chat/completions")
+                .openConnection() as HttpURLConnection
+
+        connection.requestMethod = "POST"
+        connection.connectTimeout = 12_000
+        connection.readTimeout = 45_000
+        connection.doOutput = true
+        connection.setRequestProperty(
+            "Authorization",
+            "Bearer $apiKey"
+        )
+        connection.setRequestProperty(
+            "Content-Type",
+            "application/json"
+        )
 
         connection.outputStream.use { stream ->
             stream.write(
@@ -125,57 +169,52 @@ class GroqClient {
                 null
             }
 
+            if (
+                status == 429 ||
+                status in 500..599
+            ) {
+                val retrySeconds =
+                    connection
+                        .getHeaderField("retry-after")
+                        ?.toLongOrNull()
+                        ?.coerceIn(1L, 5L)
+                        ?: 2L
+
+                throw RetryableGroqException(
+                    message
+                        ?: "Groq is temporarily unavailable.",
+                    retrySeconds * 1000L
+                )
+            }
+
             throw IllegalStateException(
-                message ?: "Groq request failed: HTTP $status"
+                message
+                    ?: "Groq request failed: HTTP $status"
             )
         }
 
         val response = JSONObject(raw)
-        val message = response
+        val content = response
             .getJSONArray("choices")
             .getJSONObject(0)
             .getJSONObject("message")
+            .optString("content")
+            .trim()
 
-        val content = message.optString("content").trim()
-        val executedTools =
-            message.optJSONArray("executed_tools")
-
-        var usedWebSearch = false
-
-        if (executedTools != null) {
-            for (index in 0 until executedTools.length()) {
-                val item =
-                    executedTools.optJSONObject(index) ?: continue
-
-                if (
-                    item.optString("type")
-                        .contains("search", ignoreCase = true)
-                ) {
-                    usedWebSearch = true
-                    break
-                }
-            }
-        }
-
-        val finalText = buildString {
-            if (!usedWebSearch) {
-                append(
-                    "⚠ Live web search was not confirmed. " +
-                        "Treat this answer as unverified.\n\n"
-                )
-            }
-            append(
-                if (content.isNotBlank()) {
-                    content
-                } else {
-                    "No answer returned."
-                }
+        if (content.isBlank()) {
+            throw IllegalStateException(
+                "Groq returned an empty answer."
             )
         }
 
         return SearchReply(
-            text = finalText,
-            usedWebSearch = usedWebSearch
+            text = content,
+            sourceCount = sourceCount
         )
     }
+
+    private class RetryableGroqException(
+        message: String,
+        val retryAfterMs: Long
+    ) : Exception(message)
 }

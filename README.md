@@ -1,27 +1,34 @@
 # AISearch
 
-AISearch is a deliberately small Android TV app for live AI-assisted
+AISearch is a small Android TV app for current, live AI-assisted
 web search.
 
-## M1
+## M2 architecture
 
-- One-screen TV interface
-- D-pad friendly
-- Text search
-- Android voice input
-- Groq `groq/compound-mini`
-- Only the `web_search` Compound tool is enabled
-- Every query is instructed to search the live web before answering
-- The response is marked unverified if `executed_tools` does not
-  confirm a search tool was used
-- Groq API key is encrypted with Android Keystore and stored only on
-  the device
-- No account, history, sidebar or unrelated features
+Search flow:
 
-## First run
+1. Tavily keyless Search fetches live web results.
+2. AISearch requires at least one usable live result.
+3. Groq `openai/gpt-oss-120b` receives only those results plus the
+   user's question.
+4. The model is instructed to answer only from supplied live sources.
+5. The answer includes source URLs.
+6. If current information is not supported by search results,
+   AISearch must say it cannot confirm it.
 
-1. Install the APK.
-2. Enter a Groq API key once.
-3. Search.
+## Cost design
+
+- Tavily keyless Search is free and rate-limited.
+- Groq Free Plan is used for `openai/gpt-oss-120b`.
+- Groq paid built-in Web Search is not used.
+- Only a Groq API key is required on the device.
+
+## Reliability
+
+- Fails closed if no usable live web result exists.
+- Uses up to five live sources.
+- Uses low-temperature synthesis.
+- Retries Groq once for HTTP 429 and 5xx errors.
+- Sends the current date into search and synthesis context.
 
 Package: `com.nudroid12.aisearch`

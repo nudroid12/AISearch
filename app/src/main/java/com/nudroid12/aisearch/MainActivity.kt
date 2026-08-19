@@ -103,20 +103,30 @@ class MainActivity : Activity() {
         }
 
         setLoading(true)
-        resultText.text = "Searching the live web…"
+        resultText.text = "Searching current web sources..."
         resultScroll.scrollTo(0, 0)
 
         executor.execute {
             try {
+                val liveResults =
+                    LiveSearchClient().search(query)
+
                 val reply =
-                    GroqClient().search(apiKey, query)
+                    GroqClient().answer(
+                        apiKey = apiKey,
+                        searchBundle = liveResults
+                    )
 
                 runOnUiThread {
-                    resultText.text = reply.text
+                    resultText.text =
+                        "✓ LIVE • ${reply.sourceCount} sources\n\n" +
+                            reply.text
+
                     Linkify.addLinks(
                         resultText,
                         Linkify.WEB_URLS
                     )
+
                     resultScroll.scrollTo(0, 0)
                     setLoading(false)
                     resultScroll.requestFocus()
@@ -124,11 +134,12 @@ class MainActivity : Activity() {
             } catch (error: Exception) {
                 runOnUiThread {
                     resultText.text =
-                        "Search failed.\n\n" +
+                        "Live search failed.\n\n" +
                             (
                                 error.message
                                     ?: "Unknown error"
                             )
+
                     setLoading(false)
                     searchButton.requestFocus()
                 }
@@ -227,9 +238,10 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this)
                 .setTitle("Groq API Key")
                 .setMessage(
-                    "Enter your Groq API key. It is " +
-                        "encrypted with Android Keystore " +
-                        "and stored only on this device."
+                    "Enter your Groq API key. Live web search " +
+                        "uses free Tavily keyless access. The " +
+                        "Groq key is encrypted and stored only " +
+                        "on this device."
                 )
                 .setView(field)
                 .setPositiveButton("Save", null)
@@ -247,8 +259,7 @@ class MainActivity : Activity() {
                         field.text.toString().trim()
 
                     if (key.isBlank()) {
-                        field.error =
-                            "API key required"
+                        field.error = "API key required"
                         return@setOnClickListener
                     }
 
