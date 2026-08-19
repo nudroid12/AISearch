@@ -1,0 +1,1004 @@
+name: AISearch Personal Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Consolidate personal M4 source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SRC="app/src/main/java/com/nudroid12/aisearch"
+          RES="app/src/main/res"
+
+          test -f "$SRC/ApiKeyStore.kt"
+          test -f "$SRC/LiveSearchClient.kt"
+          test -f "$SRC/GroqClient.kt"
+
+          mkdir -p \
+            "$RES/layout" \
+            "$RES/values" \
+            "$RES/drawable" \
+            "$RES/color"
+
+          rm -f "$RES/drawable/button_text.xml"
+
+          cat > "$RES/values/strings.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">AISearch</string>
+              <string name="search_hint">Ask anything</string>
+              <string name="search">Search</string>
+              <string name="voice">Voice</string>
+              <string name="api_key">API Key</string>
+              <string name="live_web">LIVE WEB</string>
+              <string name="ready">Ready for a live search</string>
+              <string name="empty_result">Type or speak a question to search the current web.</string>
+          </resources>
+          EOF
+
+          cat > "$RES/values/colors.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="bg">#0D0F12</color>
+              <color name="panel">#171A1F</color>
+              <color name="panel_soft">#1E2229</color>
+              <color name="text_primary">#F7F8FA</color>
+              <color name="text_secondary">#A8AFBA</color>
+              <color name="focus_fill">#F4F6F8</color>
+              <color name="focus_text">#101216</color>
+              <color name="focus_stroke">#FFFFFF</color>
+              <color name="divider">#303641</color>
+              <color name="accent">#E8EAF0</color>
+          </resources>
+          EOF
+
+          cat > "$RES/color/button_text.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <selector xmlns:android="http://schemas.android.com/apk/res/android">
+              <item
+                  android:state_focused="true"
+                  android:color="@color/focus_text" />
+              <item android:color="@color/text_primary" />
+          </selector>
+          EOF
+
+          cat > "$RES/drawable/focus_button.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <selector xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:state_focused="true">
+                  <shape android:shape="rectangle">
+                      <solid android:color="@color/focus_fill" />
+                      <corners android:radius="14dp" />
+                      <stroke
+                          android:width="3dp"
+                          android:color="@color/focus_stroke" />
+                  </shape>
+              </item>
+              <item>
+                  <shape android:shape="rectangle">
+                      <solid android:color="@color/panel_soft" />
+                      <corners android:radius="14dp" />
+                      <stroke
+                          android:width="1dp"
+                          android:color="@color/divider" />
+                  </shape>
+              </item>
+          </selector>
+          EOF
+
+          cat > "$RES/drawable/search_box.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <selector xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:state_focused="true">
+                  <shape android:shape="rectangle">
+                      <solid android:color="@color/panel_soft" />
+                      <corners android:radius="16dp" />
+                      <stroke
+                          android:width="3dp"
+                          android:color="@color/focus_stroke" />
+                      <padding
+                          android:left="22dp"
+                          android:top="12dp"
+                          android:right="22dp"
+                          android:bottom="12dp" />
+                  </shape>
+              </item>
+              <item>
+                  <shape android:shape="rectangle">
+                      <solid android:color="@color/panel" />
+                      <corners android:radius="16dp" />
+                      <stroke
+                          android:width="1dp"
+                          android:color="@color/divider" />
+                      <padding
+                          android:left="22dp"
+                          android:top="12dp"
+                          android:right="22dp"
+                          android:bottom="12dp" />
+                  </shape>
+              </item>
+          </selector>
+          EOF
+
+          cat > "$RES/drawable/result_panel.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <selector xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:state_focused="true">
+                  <shape android:shape="rectangle">
+                      <solid android:color="@color/panel" />
+                      <corners android:radius="18dp" />
+                      <stroke
+                          android:width="2dp"
+                          android:color="@color/focus_stroke" />
+                  </shape>
+              </item>
+              <item>
+                  <shape android:shape="rectangle">
+                      <solid android:color="@color/panel" />
+                      <corners android:radius="18dp" />
+                      <stroke
+                          android:width="1dp"
+                          android:color="@color/divider" />
+                  </shape>
+              </item>
+          </selector>
+          EOF
+
+          cat > "$RES/drawable/live_badge.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"
+              android:shape="rectangle">
+              <solid android:color="@color/panel_soft" />
+              <corners android:radius="999dp" />
+              <stroke
+                  android:width="1dp"
+                  android:color="@color/divider" />
+              <padding
+                  android:left="14dp"
+                  android:top="7dp"
+                  android:right="14dp"
+                  android:bottom="7dp" />
+          </shape>
+          EOF
+
+          cat > "$RES/drawable/ic_aisearch.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+
+              <path
+                  android:fillColor="#111318"
+                  android:pathData="M16,8 H92 A8,8 0,0 1,100 16 V92 A8,8 0,0 1,92 100 H16 A8,8 0,0 1,8 92 V16 A8,8 0,0 1,16 8 Z" />
+
+              <path
+                  android:fillColor="@android:color/transparent"
+                  android:strokeColor="#F7F8FA"
+                  android:strokeWidth="7"
+                  android:strokeLineCap="round"
+                  android:pathData="M48,28 A20,20 0,1 0,48 68 A20,20 0,1 0,48 28" />
+
+              <path
+                  android:fillColor="@android:color/transparent"
+                  android:strokeColor="#F7F8FA"
+                  android:strokeWidth="7"
+                  android:strokeLineCap="round"
+                  android:pathData="M63,63 L82,82" />
+
+              <path
+                  android:fillColor="#F7F8FA"
+                  android:pathData="M79,22 L82,30 L90,33 L82,36 L79,44 L76,36 L68,33 L76,30 Z" />
+          </vector>
+          EOF
+
+          cat > "$RES/layout/activity_main.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:background="@color/bg"
+              android:orientation="vertical"
+              android:paddingLeft="58dp"
+              android:paddingTop="34dp"
+              android:paddingRight="58dp"
+              android:paddingBottom="30dp">
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:gravity="center_vertical"
+                  android:orientation="horizontal">
+
+                  <TextView
+                      android:layout_width="0dp"
+                      android:layout_height="wrap_content"
+                      android:layout_weight="1"
+                      android:text="@string/app_name"
+                      android:textColor="@color/text_primary"
+                      android:textSize="30sp"
+                      android:textStyle="bold" />
+
+                  <TextView
+                      android:id="@+id/liveBadge"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:background="@drawable/live_badge"
+                      android:text="@string/live_web"
+                      android:textColor="@color/text_secondary"
+                      android:textSize="12sp"
+                      android:textStyle="bold" />
+              </LinearLayout>
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="24dp"
+                  android:gravity="center_vertical"
+                  android:orientation="horizontal">
+
+                  <EditText
+                      android:id="@+id/queryInput"
+                      android:layout_width="0dp"
+                      android:layout_height="66dp"
+                      android:layout_weight="1"
+                      android:background="@drawable/search_box"
+                      android:hint="@string/search_hint"
+                      android:imeOptions="actionSearch"
+                      android:inputType="text"
+                      android:maxLines="1"
+                      android:nextFocusDown="@id/resultScroll"
+                      android:nextFocusRight="@id/voiceButton"
+                      android:selectAllOnFocus="false"
+                      android:textColor="@color/text_primary"
+                      android:textColorHint="@color/text_secondary"
+                      android:textSize="20sp" />
+
+                  <Button
+                      android:id="@+id/voiceButton"
+                      android:layout_width="112dp"
+                      android:layout_height="66dp"
+                      android:layout_marginLeft="12dp"
+                      android:background="@drawable/focus_button"
+                      android:nextFocusDown="@id/resultScroll"
+                      android:nextFocusLeft="@id/queryInput"
+                      android:nextFocusRight="@id/searchButton"
+                      android:text="@string/voice"
+                      android:textAllCaps="false"
+                      android:textColor="@color/button_text"
+                      android:textSize="16sp" />
+
+                  <Button
+                      android:id="@+id/searchButton"
+                      android:layout_width="128dp"
+                      android:layout_height="66dp"
+                      android:layout_marginLeft="12dp"
+                      android:background="@drawable/focus_button"
+                      android:nextFocusDown="@id/resultScroll"
+                      android:nextFocusLeft="@id/voiceButton"
+                      android:text="@string/search"
+                      android:textAllCaps="false"
+                      android:textColor="@color/button_text"
+                      android:textSize="16sp"
+                      android:textStyle="bold" />
+              </LinearLayout>
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="32dp"
+                  android:layout_marginTop="10dp"
+                  android:gravity="center_vertical"
+                  android:orientation="horizontal">
+
+                  <ProgressBar
+                      android:id="@+id/progress"
+                      style="?android:attr/progressBarStyleSmall"
+                      android:layout_width="22dp"
+                      android:layout_height="22dp"
+                      android:indeterminate="true"
+                      android:visibility="gone" />
+
+                  <TextView
+                      android:id="@+id/statusText"
+                      android:layout_width="0dp"
+                      android:layout_height="wrap_content"
+                      android:layout_marginLeft="10dp"
+                      android:layout_weight="1"
+                      android:text="@string/ready"
+                      android:textColor="@color/text_secondary"
+                      android:textSize="14sp" />
+              </LinearLayout>
+
+              <ScrollView
+                  android:id="@+id/resultScroll"
+                  android:layout_width="match_parent"
+                  android:layout_height="0dp"
+                  android:layout_marginTop="10dp"
+                  android:layout_weight="1"
+                  android:background="@drawable/result_panel"
+                  android:clipToPadding="false"
+                  android:fadeScrollbars="false"
+                  android:focusable="true"
+                  android:focusableInTouchMode="true"
+                  android:nextFocusDown="@id/apiKeyButton"
+                  android:nextFocusUp="@id/queryInput"
+                  android:paddingLeft="28dp"
+                  android:paddingTop="24dp"
+                  android:paddingRight="28dp"
+                  android:paddingBottom="26dp"
+                  android:scrollbars="vertical">
+
+                  <TextView
+                      android:id="@+id/resultText"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:lineSpacingExtra="7dp"
+                      android:text="@string/empty_result"
+                      android:textColor="@color/text_primary"
+                      android:textIsSelectable="true"
+                      android:textSize="19sp" />
+              </ScrollView>
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="50dp"
+                  android:layout_marginTop="12dp"
+                  android:gravity="end|center_vertical"
+                  android:orientation="horizontal">
+
+                  <TextView
+                      android:layout_width="0dp"
+                      android:layout_height="wrap_content"
+                      android:layout_weight="1"
+                      android:text="D-pad: move • OK: select • ↑↓: scroll"
+                      android:textColor="@color/text_secondary"
+                      android:textSize="12sp" />
+
+                  <Button
+                      android:id="@+id/apiKeyButton"
+                      android:layout_width="108dp"
+                      android:layout_height="46dp"
+                      android:background="@drawable/focus_button"
+                      android:nextFocusUp="@id/resultScroll"
+                      android:text="@string/api_key"
+                      android:textAllCaps="false"
+                      android:textColor="@color/button_text"
+                      android:textSize="13sp" />
+              </LinearLayout>
+
+          </LinearLayout>
+          EOF
+
+          cat > "$SRC/MainActivity.kt" <<'EOF'
+          package com.nudroid12.aisearch
+
+          import android.app.Activity
+          import android.app.AlertDialog
+          import android.content.ActivityNotFoundException
+          import android.content.Intent
+          import android.os.Bundle
+          import android.speech.RecognizerIntent
+          import android.text.InputType
+          import android.text.util.Linkify
+          import android.view.KeyEvent
+          import android.view.View
+          import android.view.inputmethod.EditorInfo
+          import android.view.inputmethod.InputMethodManager
+          import android.widget.Button
+          import android.widget.EditText
+          import android.widget.ProgressBar
+          import android.widget.ScrollView
+          import android.widget.TextView
+          import android.widget.Toast
+          import java.util.Locale
+          import java.util.concurrent.Executors
+
+          class MainActivity : Activity() {
+
+              private val executor = Executors.newSingleThreadExecutor()
+
+              private lateinit var keyStore: ApiKeyStore
+              private lateinit var queryInput: EditText
+              private lateinit var searchButton: Button
+              private lateinit var voiceButton: Button
+              private lateinit var apiKeyButton: Button
+              private lateinit var resultText: TextView
+              private lateinit var resultScroll: ScrollView
+              private lateinit var progress: ProgressBar
+              private lateinit var statusText: TextView
+
+              private var hasResult = false
+              private var isSearching = false
+
+              companion object {
+                  private const val VOICE_REQUEST = 501
+              }
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContentView(R.layout.activity_main)
+
+                  window.decorView.systemUiVisibility =
+                      View.SYSTEM_UI_FLAG_FULLSCREEN or
+                          View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                          View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+
+                  keyStore = ApiKeyStore(this)
+                  queryInput = findViewById(R.id.queryInput)
+                  searchButton = findViewById(R.id.searchButton)
+                  voiceButton = findViewById(R.id.voiceButton)
+                  apiKeyButton = findViewById(R.id.apiKeyButton)
+                  resultText = findViewById(R.id.resultText)
+                  resultScroll = findViewById(R.id.resultScroll)
+                  progress = findViewById(R.id.progress)
+                  statusText = findViewById(R.id.statusText)
+
+                  configureInput()
+                  configureButtons()
+                  configureResultScrolling()
+                  configureFocusAnimation()
+
+                  resultText.autoLinkMask = Linkify.WEB_URLS
+                  resultText.linksClickable = true
+
+                  queryInput.requestFocus()
+
+                  if (keyStore.load().isNullOrBlank()) {
+                      showApiKeyDialog(firstRun = true)
+                  }
+              }
+
+              private fun configureInput() {
+                  queryInput.setOnEditorActionListener { _, actionId, event ->
+                      val enterPressed =
+                          event?.keyCode == KeyEvent.KEYCODE_ENTER &&
+                              event.action == KeyEvent.ACTION_DOWN
+
+                      if (
+                          actionId == EditorInfo.IME_ACTION_SEARCH ||
+                          enterPressed
+                      ) {
+                          performSearch()
+                          true
+                      } else {
+                          false
+                      }
+                  }
+
+                  queryInput.setOnKeyListener { _, keyCode, event ->
+                      if (
+                          event.action == KeyEvent.ACTION_DOWN &&
+                          keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                      ) {
+                          showKeyboard()
+                      }
+                      false
+                  }
+              }
+
+              private fun configureButtons() {
+                  searchButton.setOnClickListener { performSearch() }
+                  voiceButton.setOnClickListener { startVoiceSearch() }
+                  apiKeyButton.setOnClickListener { showApiKeyDialog() }
+              }
+
+              private fun configureResultScrolling() {
+                  resultScroll.setOnKeyListener { _, keyCode, event ->
+                      if (event.action != KeyEvent.ACTION_DOWN) {
+                          return@setOnKeyListener false
+                      }
+
+                      val page =
+                          (resultScroll.height * 0.58f)
+                              .toInt()
+                              .coerceAtLeast(180)
+
+                      when (keyCode) {
+                          KeyEvent.KEYCODE_DPAD_DOWN -> {
+                              if (resultScroll.canScrollVertically(1)) {
+                                  resultScroll.smoothScrollBy(0, page)
+                              } else {
+                                  apiKeyButton.requestFocus()
+                              }
+                              true
+                          }
+
+                          KeyEvent.KEYCODE_DPAD_UP -> {
+                              if (resultScroll.canScrollVertically(-1)) {
+                                  resultScroll.smoothScrollBy(0, -page)
+                              } else {
+                                  queryInput.requestFocus()
+                              }
+                              true
+                          }
+
+                          KeyEvent.KEYCODE_DPAD_LEFT -> {
+                              queryInput.requestFocus()
+                              true
+                          }
+
+                          else -> false
+                      }
+                  }
+              }
+
+              private fun configureFocusAnimation() {
+                  listOf<View>(
+                      queryInput,
+                      voiceButton,
+                      searchButton,
+                      resultScroll,
+                      apiKeyButton
+                  ).forEach { view ->
+                      view.setOnFocusChangeListener { target, focused ->
+                          val scale = if (focused) 1.025f else 1.0f
+
+                          target.animate()
+                              .scaleX(scale)
+                              .scaleY(scale)
+                              .setDuration(120L)
+                              .start()
+                      }
+                  }
+              }
+
+              private fun performSearch() {
+                  if (isSearching) return
+
+                  val query = queryInput.text.toString().trim()
+
+                  if (query.isBlank()) {
+                      statusText.text = "Enter a question first."
+                      queryInput.requestFocus()
+                      showKeyboard()
+                      return
+                  }
+
+                  val apiKey = keyStore.load()
+
+                  if (apiKey.isNullOrBlank()) {
+                      showApiKeyDialog(firstRun = true)
+                      return
+                  }
+
+                  hideKeyboard()
+                  setLoading(true)
+
+                  hasResult = false
+                  resultText.text = ""
+                  resultScroll.scrollTo(0, 0)
+                  statusText.text = "Searching current web sources..."
+
+                  executor.execute {
+                      try {
+                          val liveResults =
+                              LiveSearchClient().search(query)
+
+                          runOnUiThread {
+                              statusText.text =
+                                  "Reading ${liveResults.results.size} live sources..."
+                          }
+
+                          val reply =
+                              GroqClient().answer(
+                                  apiKey = apiKey,
+                                  searchBundle = liveResults
+                              )
+
+                          runOnUiThread {
+                              hasResult = true
+
+                              resultText.text = reply.text
+                              Linkify.addLinks(
+                                  resultText,
+                                  Linkify.WEB_URLS
+                              )
+
+                              resultScroll.scrollTo(0, 0)
+                              statusText.text =
+                                  "LIVE • ${reply.sourceCount} sources"
+
+                              setLoading(false)
+                              resultScroll.requestFocus()
+                          }
+                      } catch (error: Exception) {
+                          runOnUiThread {
+                              hasResult = false
+
+                              resultText.text =
+                                  "Couldn't complete the live search.\n\n" +
+                                      (
+                                          error.message
+                                              ?: "Please try again."
+                                      )
+
+                              statusText.text = "Search failed"
+                              setLoading(false)
+                              searchButton.requestFocus()
+                          }
+                      }
+                  }
+              }
+
+              private fun setLoading(loading: Boolean) {
+                  isSearching = loading
+
+                  progress.visibility =
+                      if (loading) View.VISIBLE else View.GONE
+
+                  searchButton.isEnabled = !loading
+                  voiceButton.isEnabled = !loading
+                  queryInput.isEnabled = !loading
+                  apiKeyButton.isEnabled = !loading
+              }
+
+              private fun startVoiceSearch() {
+                  if (isSearching) return
+
+                  hideKeyboard()
+
+                  val intent =
+                      Intent(
+                          RecognizerIntent.ACTION_RECOGNIZE_SPEECH
+                      ).apply {
+                          putExtra(
+                              RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                              RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                          )
+                          putExtra(
+                              RecognizerIntent.EXTRA_LANGUAGE,
+                              Locale.getDefault()
+                          )
+                          putExtra(
+                              RecognizerIntent.EXTRA_PROMPT,
+                              "What do you want to search?"
+                          )
+                      }
+
+                  try {
+                      @Suppress("DEPRECATION")
+                      startActivityForResult(
+                          intent,
+                          VOICE_REQUEST
+                      )
+                  } catch (_: ActivityNotFoundException) {
+                      Toast.makeText(
+                          this,
+                          "Voice input is not available on this device.",
+                          Toast.LENGTH_LONG
+                      ).show()
+
+                      queryInput.requestFocus()
+                  }
+              }
+
+              @Deprecated("Kept for broad Android TV compatibility")
+              override fun onActivityResult(
+                  requestCode: Int,
+                  resultCode: Int,
+                  data: Intent?
+              ) {
+                  super.onActivityResult(
+                      requestCode,
+                      resultCode,
+                      data
+                  )
+
+                  if (
+                      requestCode == VOICE_REQUEST &&
+                      resultCode == RESULT_OK
+                  ) {
+                      val results =
+                          data?.getStringArrayListExtra(
+                              RecognizerIntent.EXTRA_RESULTS
+                          )
+
+                      val text =
+                          results?.firstOrNull()?.trim().orEmpty()
+
+                      if (text.isNotBlank()) {
+                          queryInput.setText(text)
+                          queryInput.setSelection(text.length)
+                          performSearch()
+                      } else {
+                          queryInput.requestFocus()
+                      }
+                  } else if (requestCode == VOICE_REQUEST) {
+                      queryInput.requestFocus()
+                  }
+              }
+
+              private fun showApiKeyDialog(
+                  firstRun: Boolean = false
+              ) {
+                  hideKeyboard()
+
+                  val field = EditText(this).apply {
+                      hint = "gsk_..."
+                      inputType =
+                          InputType.TYPE_CLASS_TEXT or
+                              InputType.TYPE_TEXT_VARIATION_PASSWORD
+                      setSingleLine(true)
+                      setPadding(32, 12, 32, 12)
+                  }
+
+                  val dialog =
+                      AlertDialog.Builder(this)
+                          .setTitle("Groq API Key")
+                          .setMessage(
+                              "Your key is encrypted with Android Keystore " +
+                                  "and stored only on this device."
+                          )
+                          .setView(field)
+                          .setPositiveButton("Save", null)
+                          .setNegativeButton(
+                              if (firstRun) "Later" else "Cancel",
+                              null
+                          )
+                          .create()
+
+                  dialog.setOnShowListener {
+                      dialog
+                          .getButton(AlertDialog.BUTTON_POSITIVE)
+                          .setOnClickListener {
+                              val key =
+                                  field.text.toString().trim()
+
+                              if (key.isBlank()) {
+                                  field.error = "API key required"
+                                  return@setOnClickListener
+                              }
+
+                              keyStore.save(key)
+                              dialog.dismiss()
+
+                              Toast.makeText(
+                                  this,
+                                  "API key saved.",
+                                  Toast.LENGTH_SHORT
+                              ).show()
+
+                              statusText.text = "Ready for a live search"
+                              queryInput.requestFocus()
+                          }
+                  }
+
+                  dialog.setOnDismissListener {
+                      queryInput.requestFocus()
+                  }
+
+                  dialog.show()
+              }
+
+              private fun showKeyboard() {
+                  queryInput.post {
+                      val inputMethod =
+                          getSystemService(INPUT_METHOD_SERVICE)
+                              as InputMethodManager
+
+                      inputMethod.showSoftInput(
+                          queryInput,
+                          InputMethodManager.SHOW_IMPLICIT
+                      )
+                  }
+              }
+
+              private fun hideKeyboard() {
+                  val inputMethod =
+                      getSystemService(INPUT_METHOD_SERVICE)
+                          as InputMethodManager
+
+                  inputMethod.hideSoftInputFromWindow(
+                      queryInput.windowToken,
+                      0
+                  )
+              }
+
+              @Deprecated("TV back behaviour")
+              override fun onBackPressed() {
+                  if (isSearching) return
+
+                  if (!queryInput.hasFocus()) {
+                      queryInput.requestFocus()
+
+                      if (hasResult) {
+                          queryInput.setSelection(
+                              queryInput.text.length
+                          )
+                      }
+
+                      return
+                  }
+
+                  super.onBackPressed()
+              }
+
+              override fun onDestroy() {
+                  executor.shutdownNow()
+                  super.onDestroy()
+              }
+          }
+          EOF
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle = Path("app/build.gradle.kts")
+          text = gradle.read_text()
+
+          text = re.sub(
+              r'versionCode\s*=\s*\d+',
+              'versionCode = 40',
+              text
+          )
+          text = re.sub(
+              r'versionName\s*=\s*"[^"]+"',
+              'versionName = "0.4.0"',
+              text
+          )
+          gradle.write_text(text)
+
+          manifest = Path("app/src/main/AndroidManifest.xml")
+          text = manifest.read_text()
+
+          if 'android:icon=' not in text:
+              text = text.replace(
+                  '<application',
+                  '<application\n'
+                  '        android:icon="@drawable/ic_aisearch"\n'
+                  '        android:roundIcon="@drawable/ic_aisearch"'
+              )
+
+          manifest.write_text(text)
+          PY
+
+          cat > README.md <<'EOF'
+          # AISearch
+
+          Personal Android TV AI search app.
+
+          AISearch is intentionally small. It searches current web results first,
+          then uses Groq to summarise those live sources for easy reading on TV.
+
+          ## Current version
+
+          `0.4.0`
+
+          ## Search flow
+
+          1. Tavily keyless search fetches current web results.
+          2. AISearch requires usable live sources.
+          3. Groq `openai/gpt-oss-120b` summarises only the supplied sources.
+          4. Current facts are not allowed to silently fall back to model memory.
+
+          ## TV behaviour
+
+          - Text search
+          - Voice search
+          - D-pad focus navigation
+          - Page scrolling for long answers
+          - Back returns to the search field before exiting
+          - Groq API key is encrypted with Android Keystore
+          - No account, history, sidebar, updater, store integration or public
+            distribution features
+
+          ## Build
+
+          Run the `AISearch Personal Build` workflow manually.
+
+          Artifact:
+          `AISearch-personal-debug`
+
+          Package:
+          `com.nudroid12.aisearch`
+          EOF
+
+      - name: Validate source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          grep -q 'fun answer(' \
+            app/src/main/java/com/nudroid12/aisearch/GroqClient.kt
+
+          grep -q 'LiveSearchClient().search(query)' \
+            app/src/main/java/com/nudroid12/aisearch/MainActivity.kt
+
+          grep -q 'versionName = "0.4.0"' \
+            app/build.gradle.kts
+
+          grep -q 'android:icon="@drawable/ic_aisearch"' \
+            app/src/main/AndroidManifest.xml
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          for path in Path("app/src/main/res").rglob("*.xml"):
+              ET.parse(path)
+              print("OK", path)
+
+          ET.parse("app/src/main/AndroidManifest.xml")
+          print("OK app/src/main/AndroidManifest.xml")
+          PY
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+      - name: Set up Gradle 9.5.0
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.0"
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          gradle :app:assembleDebug \
+            --stacktrace \
+            --console=plain
+
+          test -f app/build/outputs/apk/debug/app-debug.apk
+
+          cp \
+            app/build/outputs/apk/debug/app-debug.apk \
+            AISearch-personal-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AISearch-personal-debug
+          path: AISearch-personal-debug.apk
+          if-no-files-found: error
+
+      - name: Save stable source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Do not modify workflow files from Actions.
+          # This avoids GitHub workflow-scope push restrictions.
+          git add README.md app
+
+          if git diff --cached --quiet; then
+            echo "Stable source already saved."
+            exit 0
+          fi
+
+          git commit -m "AISearch 0.4.0 personal stable [skip ci]"
+          git push origin HEAD:main
