@@ -1,0 +1,775 @@
+name: AISearch M2 Live Search Reliability
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Apply M2 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SRC="app/src/main/java/com/nudroid12/aisearch"
+          mkdir -p "$SRC"
+
+          cat > "$SRC/LiveSearchClient.kt" <<'EOF'
+          package com.nudroid12.aisearch
+
+          import org.json.JSONObject
+          import java.io.BufferedReader
+          import java.net.HttpURLConnection
+          import java.net.URL
+          import java.text.SimpleDateFormat
+          import java.util.Date
+          import java.util.Locale
+
+          data class WebResult(
+              val title: String,
+              val url: String,
+              val content: String,
+              val score: Double
+          )
+
+          data class WebSearchBundle(
+              val query: String,
+              val results: List<WebResult>
+          )
+
+          class LiveSearchClient {
+
+              fun search(query: String): WebSearchBundle {
+                  val today = SimpleDateFormat(
+                      "yyyy-MM-dd",
+                      Locale.US
+                  ).format(Date())
+
+                  val requestQuery =
+                      "Current information as of $today. $query"
+
+                  val connection =
+                      URL("https://api.tavily.com/search")
+                          .openConnection() as HttpURLConnection
+
+                  connection.requestMethod = "POST"
+                  connection.connectTimeout = 12_000
+                  connection.readTimeout = 25_000
+                  connection.doOutput = true
+                  connection.setRequestProperty(
+                      "Content-Type",
+                      "application/json"
+                  )
+                  connection.setRequestProperty(
+                      "X-Tavily-Access-Mode",
+                      "keyless"
+                  )
+
+                  val body = JSONObject().apply {
+                      put("query", requestQuery)
+                      put("search_depth", "basic")
+                      put("max_results", 5)
+                      put("include_answer", false)
+                      put("include_raw_content", false)
+                      put("include_images", false)
+                      put("auto_parameters", false)
+                  }
+
+                  connection.outputStream.use { stream ->
+                      stream.write(
+                          body.toString().toByteArray(Charsets.UTF_8)
+                      )
+                  }
+
+                  val status = connection.responseCode
+                  val input = if (status in 200..299) {
+                      connection.inputStream
+                  } else {
+                      connection.errorStream
+                  }
+
+                  val raw = BufferedReader(input.reader()).use {
+                      it.readText()
+                  }
+
+                  if (status !in 200..299) {
+                      val message = try {
+                          JSONObject(raw)
+                              .optString("detail")
+                              .takeIf { it.isNotBlank() }
+                      } catch (_: Exception) {
+                          null
+                      }
+
+                      throw IllegalStateException(
+                          message
+                              ?: "Live web search failed: HTTP $status"
+                      )
+                  }
+
+                  val response = JSONObject(raw)
+                  val array = response.optJSONArray("results")
+                      ?: throw IllegalStateException(
+                          "Live web search returned no results."
+                      )
+
+                  val results = buildList {
+                      for (index in 0 until array.length()) {
+                          val item =
+                              array.optJSONObject(index) ?: continue
+
+                          val title =
+                              item.optString("title").trim()
+                          val url =
+                              item.optString("url").trim()
+                          val content =
+                              item.optString("content").trim()
+                          val score =
+                              item.optDouble("score", 0.0)
+
+                          if (
+                              title.isNotBlank() &&
+                              url.startsWith("http") &&
+                              content.isNotBlank()
+                          ) {
+                              add(
+                                  WebResult(
+                                      title = title,
+                                      url = url,
+                                      content = content,
+                                      score = score
+                                  )
+                              )
+                          }
+                      }
+                  }
+
+                  if (results.isEmpty()) {
+                      throw IllegalStateException(
+                          "No usable live web results were found."
+                      )
+                  }
+
+                  return WebSearchBundle(
+                      query = query,
+                      results = results
+                  )
+              }
+          }
+          EOF
+
+          cat > "$SRC/GroqClient.kt" <<'EOF'
+          package com.nudroid12.aisearch
+
+          import org.json.JSONArray
+          import org.json.JSONObject
+          import java.io.BufferedReader
+          import java.net.HttpURLConnection
+          import java.net.URL
+          import java.text.SimpleDateFormat
+          import java.util.Date
+          import java.util.Locale
+
+          data class SearchReply(
+              val text: String,
+              val sourceCount: Int
+          )
+
+          class GroqClient {
+
+              fun answer(
+                  apiKey: String,
+                  searchBundle: WebSearchBundle
+              ): SearchReply {
+                  val today = SimpleDateFormat(
+                      "yyyy-MM-dd",
+                      Locale.US
+                  ).format(Date())
+
+                  val sourceText = buildString {
+                      searchBundle.results.forEachIndexed { index, result ->
+                          append("[SOURCE ${index + 1}]\n")
+                          append("Title: ${result.title}\n")
+                          append("URL: ${result.url}\n")
+                          append("Content: ${result.content}\n\n")
+                      }
+                  }
+
+                  val systemPrompt = """
+                      You are AISearch, a concise TV search assistant.
+                      Current date: $today.
+
+                      The web search has already been performed for you.
+
+                      STRICT RULES:
+                      1. Answer using ONLY the supplied LIVE WEB SOURCES.
+                      2. Do not use stored model knowledge to add current facts.
+                      3. If the sources do not prove the answer, say:
+                         "I cannot confirm this from the current search results."
+                      4. For changing facts such as sports squads, office holders,
+                         prices, schedules, scores, news and releases, prefer the
+                         newest and most authoritative supplied source.
+                      5. Never replace current source information with memory.
+                      6. Keep the answer easy to read on a television.
+                      7. Reply in the user's language.
+                      8. End with a short Sources section containing only URLs
+                         actually relied on.
+                      9. Do not invent URLs or citations.
+                  """.trimIndent()
+
+                  val userPrompt = """
+                      QUESTION:
+                      ${searchBundle.query}
+
+                      LIVE WEB SOURCES:
+                      $sourceText
+                  """.trimIndent()
+
+                  val body = JSONObject().apply {
+                      put("model", "openai/gpt-oss-120b")
+                      put(
+                          "messages",
+                          JSONArray().apply {
+                              put(
+                                  JSONObject().apply {
+                                      put("role", "system")
+                                      put("content", systemPrompt)
+                                  }
+                              )
+                              put(
+                                  JSONObject().apply {
+                                      put("role", "user")
+                                      put("content", userPrompt)
+                                  }
+                              )
+                          }
+                      )
+                      put("temperature", 0.1)
+                      put("max_completion_tokens", 900)
+                  }
+
+                  return requestWithTransientRetry(
+                      apiKey = apiKey,
+                      body = body,
+                      sourceCount = searchBundle.results.size
+                  )
+              }
+
+              private fun requestWithTransientRetry(
+                  apiKey: String,
+                  body: JSONObject,
+                  sourceCount: Int
+              ): SearchReply {
+                  var lastError: Exception? = null
+
+                  repeat(2) { attempt ->
+                      try {
+                          return requestOnce(
+                              apiKey = apiKey,
+                              body = body,
+                              sourceCount = sourceCount
+                          )
+                      } catch (error: RetryableGroqException) {
+                          lastError = error
+                          if (attempt == 0) {
+                              Thread.sleep(error.retryAfterMs)
+                          }
+                      }
+                  }
+
+                  throw lastError
+                      ?: IllegalStateException("Groq request failed.")
+              }
+
+              private fun requestOnce(
+                  apiKey: String,
+                  body: JSONObject,
+                  sourceCount: Int
+              ): SearchReply {
+                  val connection =
+                      URL("https://api.groq.com/openai/v1/chat/completions")
+                          .openConnection() as HttpURLConnection
+
+                  connection.requestMethod = "POST"
+                  connection.connectTimeout = 12_000
+                  connection.readTimeout = 45_000
+                  connection.doOutput = true
+                  connection.setRequestProperty(
+                      "Authorization",
+                      "Bearer $apiKey"
+                  )
+                  connection.setRequestProperty(
+                      "Content-Type",
+                      "application/json"
+                  )
+
+                  connection.outputStream.use { stream ->
+                      stream.write(
+                          body.toString().toByteArray(Charsets.UTF_8)
+                      )
+                  }
+
+                  val status = connection.responseCode
+                  val input = if (status in 200..299) {
+                      connection.inputStream
+                  } else {
+                      connection.errorStream
+                  }
+
+                  val raw = BufferedReader(input.reader()).use {
+                      it.readText()
+                  }
+
+                  if (status !in 200..299) {
+                      val message = try {
+                          JSONObject(raw)
+                              .optJSONObject("error")
+                              ?.optString("message")
+                              ?.takeIf { it.isNotBlank() }
+                      } catch (_: Exception) {
+                          null
+                      }
+
+                      if (
+                          status == 429 ||
+                          status in 500..599
+                      ) {
+                          val retrySeconds =
+                              connection
+                                  .getHeaderField("retry-after")
+                                  ?.toLongOrNull()
+                                  ?.coerceIn(1L, 5L)
+                                  ?: 2L
+
+                          throw RetryableGroqException(
+                              message
+                                  ?: "Groq is temporarily unavailable.",
+                              retrySeconds * 1000L
+                          )
+                      }
+
+                      throw IllegalStateException(
+                          message
+                              ?: "Groq request failed: HTTP $status"
+                      )
+                  }
+
+                  val response = JSONObject(raw)
+                  val content = response
+                      .getJSONArray("choices")
+                      .getJSONObject(0)
+                      .getJSONObject("message")
+                      .optString("content")
+                      .trim()
+
+                  if (content.isBlank()) {
+                      throw IllegalStateException(
+                          "Groq returned an empty answer."
+                      )
+                  }
+
+                  return SearchReply(
+                      text = content,
+                      sourceCount = sourceCount
+                  )
+              }
+
+              private class RetryableGroqException(
+                  message: String,
+                  val retryAfterMs: Long
+              ) : Exception(message)
+          }
+          EOF
+
+          cat > "$SRC/MainActivity.kt" <<'EOF'
+          package com.nudroid12.aisearch
+
+          import android.app.Activity
+          import android.app.AlertDialog
+          import android.content.ActivityNotFoundException
+          import android.content.Intent
+          import android.os.Bundle
+          import android.speech.RecognizerIntent
+          import android.text.InputType
+          import android.text.util.Linkify
+          import android.view.KeyEvent
+          import android.view.View
+          import android.view.inputmethod.EditorInfo
+          import android.widget.Button
+          import android.widget.EditText
+          import android.widget.ProgressBar
+          import android.widget.ScrollView
+          import android.widget.TextView
+          import android.widget.Toast
+          import java.util.Locale
+          import java.util.concurrent.Executors
+
+          class MainActivity : Activity() {
+
+              private val executor = Executors.newSingleThreadExecutor()
+              private lateinit var keyStore: ApiKeyStore
+              private lateinit var queryInput: EditText
+              private lateinit var searchButton: Button
+              private lateinit var voiceButton: Button
+              private lateinit var apiKeyButton: Button
+              private lateinit var resultText: TextView
+              private lateinit var resultScroll: ScrollView
+              private lateinit var progress: ProgressBar
+
+              companion object {
+                  private const val VOICE_REQUEST = 501
+              }
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContentView(R.layout.activity_main)
+
+                  keyStore = ApiKeyStore(this)
+                  queryInput = findViewById(R.id.queryInput)
+                  searchButton = findViewById(R.id.searchButton)
+                  voiceButton = findViewById(R.id.voiceButton)
+                  apiKeyButton = findViewById(R.id.apiKeyButton)
+                  resultText = findViewById(R.id.resultText)
+                  resultScroll = findViewById(R.id.resultScroll)
+                  progress = findViewById(R.id.progress)
+
+                  queryInput.setOnEditorActionListener { _, actionId, event ->
+                      val enter =
+                          event?.keyCode == KeyEvent.KEYCODE_ENTER &&
+                              event.action == KeyEvent.ACTION_DOWN
+
+                      if (
+                          actionId == EditorInfo.IME_ACTION_SEARCH ||
+                          enter
+                      ) {
+                          performSearch()
+                          true
+                      } else {
+                          false
+                      }
+                  }
+
+                  searchButton.setOnClickListener {
+                      performSearch()
+                  }
+
+                  voiceButton.setOnClickListener {
+                      startVoiceSearch()
+                  }
+
+                  apiKeyButton.setOnClickListener {
+                      showApiKeyDialog()
+                  }
+
+                  resultText.autoLinkMask = Linkify.WEB_URLS
+                  resultText.linksClickable = true
+
+                  queryInput.requestFocus()
+
+                  if (keyStore.load().isNullOrBlank()) {
+                      showApiKeyDialog(firstRun = true)
+                  }
+              }
+
+              private fun performSearch() {
+                  val query = queryInput.text.toString().trim()
+
+                  if (query.isBlank()) {
+                      queryInput.requestFocus()
+                      return
+                  }
+
+                  val apiKey = keyStore.load()
+
+                  if (apiKey.isNullOrBlank()) {
+                      showApiKeyDialog(firstRun = true)
+                      return
+                  }
+
+                  setLoading(true)
+                  resultText.text = "Searching current web sources..."
+                  resultScroll.scrollTo(0, 0)
+
+                  executor.execute {
+                      try {
+                          val liveResults =
+                              LiveSearchClient().search(query)
+
+                          val reply =
+                              GroqClient().answer(
+                                  apiKey = apiKey,
+                                  searchBundle = liveResults
+                              )
+
+                          runOnUiThread {
+                              resultText.text =
+                                  "✓ LIVE • ${reply.sourceCount} sources\n\n" +
+                                      reply.text
+
+                              Linkify.addLinks(
+                                  resultText,
+                                  Linkify.WEB_URLS
+                              )
+
+                              resultScroll.scrollTo(0, 0)
+                              setLoading(false)
+                              resultScroll.requestFocus()
+                          }
+                      } catch (error: Exception) {
+                          runOnUiThread {
+                              resultText.text =
+                                  "Live search failed.\n\n" +
+                                      (
+                                          error.message
+                                              ?: "Unknown error"
+                                      )
+
+                              setLoading(false)
+                              searchButton.requestFocus()
+                          }
+                      }
+                  }
+              }
+
+              private fun setLoading(loading: Boolean) {
+                  progress.visibility =
+                      if (loading) View.VISIBLE else View.GONE
+
+                  searchButton.isEnabled = !loading
+                  voiceButton.isEnabled = !loading
+                  queryInput.isEnabled = !loading
+              }
+
+              private fun startVoiceSearch() {
+                  val intent =
+                      Intent(
+                          RecognizerIntent.ACTION_RECOGNIZE_SPEECH
+                      ).apply {
+                          putExtra(
+                              RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                              RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                          )
+                          putExtra(
+                              RecognizerIntent.EXTRA_LANGUAGE,
+                              Locale.getDefault()
+                          )
+                          putExtra(
+                              RecognizerIntent.EXTRA_PROMPT,
+                              "What do you want to search?"
+                          )
+                      }
+
+                  try {
+                      @Suppress("DEPRECATION")
+                      startActivityForResult(
+                          intent,
+                          VOICE_REQUEST
+                      )
+                  } catch (_: ActivityNotFoundException) {
+                      Toast.makeText(
+                          this,
+                          "Voice input is not available on this device.",
+                          Toast.LENGTH_LONG
+                      ).show()
+                  }
+              }
+
+              @Deprecated("Kept for broad Android TV compatibility")
+              override fun onActivityResult(
+                  requestCode: Int,
+                  resultCode: Int,
+                  data: Intent?
+              ) {
+                  super.onActivityResult(
+                      requestCode,
+                      resultCode,
+                      data
+                  )
+
+                  if (
+                      requestCode == VOICE_REQUEST &&
+                      resultCode == RESULT_OK
+                  ) {
+                      val results =
+                          data?.getStringArrayListExtra(
+                              RecognizerIntent.EXTRA_RESULTS
+                          )
+
+                      val text =
+                          results?.firstOrNull()?.trim().orEmpty()
+
+                      if (text.isNotBlank()) {
+                          queryInput.setText(text)
+                          queryInput.setSelection(text.length)
+                          performSearch()
+                      }
+                  }
+              }
+
+              private fun showApiKeyDialog(
+                  firstRun: Boolean = false
+              ) {
+                  val field = EditText(this).apply {
+                      hint = "gsk_..."
+                      inputType =
+                          InputType.TYPE_CLASS_TEXT or
+                              InputType.TYPE_TEXT_VARIATION_PASSWORD
+                      setSingleLine(true)
+                      setPadding(32, 12, 32, 12)
+                  }
+
+                  val dialog =
+                      AlertDialog.Builder(this)
+                          .setTitle("Groq API Key")
+                          .setMessage(
+                              "Enter your Groq API key. Live web search " +
+                                  "uses free Tavily keyless access. The " +
+                                  "Groq key is encrypted and stored only " +
+                                  "on this device."
+                          )
+                          .setView(field)
+                          .setPositiveButton("Save", null)
+                          .setNegativeButton(
+                              if (firstRun) "Later" else "Cancel",
+                              null
+                          )
+                          .create()
+
+                  dialog.setOnShowListener {
+                      dialog
+                          .getButton(AlertDialog.BUTTON_POSITIVE)
+                          .setOnClickListener {
+                              val key =
+                                  field.text.toString().trim()
+
+                              if (key.isBlank()) {
+                                  field.error = "API key required"
+                                  return@setOnClickListener
+                              }
+
+                              keyStore.save(key)
+                              dialog.dismiss()
+
+                              Toast.makeText(
+                                  this,
+                                  "API key saved.",
+                                  Toast.LENGTH_SHORT
+                              ).show()
+
+                              queryInput.requestFocus()
+                          }
+                  }
+
+                  dialog.show()
+              }
+
+              override fun onDestroy() {
+                  executor.shutdownNow()
+                  super.onDestroy()
+              }
+          }
+          EOF
+
+          cat > README.md <<'EOF'
+          # AISearch
+
+          AISearch is a small Android TV app for current, live AI-assisted
+          web search.
+
+          ## M2 architecture
+
+          Search flow:
+
+          1. Tavily keyless Search fetches live web results.
+          2. AISearch requires at least one usable live result.
+          3. Groq `openai/gpt-oss-120b` receives only those results plus the
+             user's question.
+          4. The model is instructed to answer only from supplied live sources.
+          5. The answer includes source URLs.
+          6. If current information is not supported by search results,
+             AISearch must say it cannot confirm it.
+
+          ## Cost design
+
+          - Tavily keyless Search is free and rate-limited.
+          - Groq Free Plan is used for `openai/gpt-oss-120b`.
+          - Groq paid built-in Web Search is not used.
+          - Only a Groq API key is required on the device.
+
+          ## Reliability
+
+          - Fails closed if no usable live web result exists.
+          - Uses up to five live sources.
+          - Uses low-temperature synthesis.
+          - Retries Groq once for HTTP 429 and 5xx errors.
+          - Sends the current date into search and synthesis context.
+
+          Package: `com.nudroid12.aisearch`
+          EOF
+
+          echo "M2 patch applied."
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+      - name: Set up Gradle 9.5.0
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.0"
+
+      - name: Build M2 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle :app:assembleDebug --stacktrace
+          test -f app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload M2 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AISearch-M2-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Commit M2 source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No source changes to commit."
+            exit 0
+          fi
+
+          git commit -m "AISearch M2 live search reliability [skip ci]"
+          git push origin HEAD:main
