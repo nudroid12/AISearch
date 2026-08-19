@@ -1,34 +1,38 @@
 # AISearch
 
-AISearch is a small Android TV app for current, live AI-assisted
-web search.
+Personal Android TV AI search app.
 
-## M2 architecture
+AISearch is intentionally small. It searches current web results first,
+then uses Groq to summarise those live sources for easy reading on TV.
 
-Search flow:
+## Current version
 
-1. Tavily keyless Search fetches live web results.
-2. AISearch requires at least one usable live result.
-3. Groq `openai/gpt-oss-120b` receives only those results plus the
-   user's question.
-4. The model is instructed to answer only from supplied live sources.
-5. The answer includes source URLs.
-6. If current information is not supported by search results,
-   AISearch must say it cannot confirm it.
+`0.4.0`
 
-## Cost design
+## Search flow
 
-- Tavily keyless Search is free and rate-limited.
-- Groq Free Plan is used for `openai/gpt-oss-120b`.
-- Groq paid built-in Web Search is not used.
-- Only a Groq API key is required on the device.
+1. Tavily keyless search fetches current web results.
+2. AISearch requires usable live sources.
+3. Groq `openai/gpt-oss-120b` summarises only the supplied sources.
+4. Current facts are not allowed to silently fall back to model memory.
 
-## Reliability
+## TV behaviour
 
-- Fails closed if no usable live web result exists.
-- Uses up to five live sources.
-- Uses low-temperature synthesis.
-- Retries Groq once for HTTP 429 and 5xx errors.
-- Sends the current date into search and synthesis context.
+- Text search
+- Voice search
+- D-pad focus navigation
+- Page scrolling for long answers
+- Back returns to the search field before exiting
+- Groq API key is encrypted with Android Keystore
+- No account, history, sidebar, updater, store integration or public
+  distribution features
 
-Package: `com.nudroid12.aisearch`
+## Build
+
+Run the `AISearch Personal Build` workflow manually.
+
+Artifact:
+`AISearch-personal-debug`
+
+Package:
+`com.nudroid12.aisearch`

@@ -4,10 +4,10 @@
     android:layout_height="match_parent"
     android:background="@color/bg"
     android:orientation="vertical"
-    android:paddingLeft="56dp"
-    android:paddingTop="38dp"
-    android:paddingRight="56dp"
-    android:paddingBottom="34dp">
+    android:paddingLeft="58dp"
+    android:paddingTop="34dp"
+    android:paddingRight="58dp"
+    android:paddingBottom="30dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -21,40 +21,40 @@
             android:layout_weight="1"
             android:text="@string/app_name"
             android:textColor="@color/text_primary"
-            android:textSize="28sp"
+            android:textSize="30sp"
             android:textStyle="bold" />
 
         <TextView
+            android:id="@+id/liveBadge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/focus_button"
-            android:paddingLeft="14dp"
-            android:paddingTop="8dp"
-            android:paddingRight="14dp"
-            android:paddingBottom="8dp"
+            android:background="@drawable/live_badge"
             android:text="@string/live_web"
-            android:textColor="@color/text_primary"
-            android:textSize="13sp"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
             android:textStyle="bold" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="28dp"
+        android:layout_marginTop="24dp"
+        android:gravity="center_vertical"
         android:orientation="horizontal">
 
         <EditText
             android:id="@+id/queryInput"
             android:layout_width="0dp"
-            android:layout_height="64dp"
+            android:layout_height="66dp"
             android:layout_weight="1"
             android:background="@drawable/search_box"
             android:hint="@string/search_hint"
             android:imeOptions="actionSearch"
             android:inputType="text"
             android:maxLines="1"
+            android:nextFocusDown="@id/resultScroll"
             android:nextFocusRight="@id/voiceButton"
+            android:selectAllOnFocus="false"
             android:textColor="@color/text_primary"
             android:textColorHint="@color/text_secondary"
             android:textSize="20sp" />
@@ -62,69 +62,113 @@
         <Button
             android:id="@+id/voiceButton"
             android:layout_width="112dp"
-            android:layout_height="64dp"
+            android:layout_height="66dp"
             android:layout_marginLeft="12dp"
             android:background="@drawable/focus_button"
+            android:nextFocusDown="@id/resultScroll"
             android:nextFocusLeft="@id/queryInput"
             android:nextFocusRight="@id/searchButton"
             android:text="@string/voice"
             android:textAllCaps="false"
-            android:textColor="@color/text_primary"
-            android:textSize="17sp" />
+            android:textColor="@color/button_text"
+            android:textSize="16sp" />
 
         <Button
             android:id="@+id/searchButton"
             android:layout_width="128dp"
-            android:layout_height="64dp"
+            android:layout_height="66dp"
             android:layout_marginLeft="12dp"
             android:background="@drawable/focus_button"
+            android:nextFocusDown="@id/resultScroll"
             android:nextFocusLeft="@id/voiceButton"
             android:text="@string/search"
             android:textAllCaps="false"
-            android:textColor="@color/text_primary"
-            android:textSize="17sp"
+            android:textColor="@color/button_text"
+            android:textSize="16sp"
             android:textStyle="bold" />
     </LinearLayout>
 
-    <ProgressBar
-        android:id="@+id/progress"
-        style="?android:attr/progressBarStyleHorizontal"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="3dp"
-        android:layout_marginTop="16dp"
-        android:indeterminate="true"
-        android:visibility="gone" />
+        android:layout_height="32dp"
+        android:layout_marginTop="10dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ProgressBar
+            android:id="@+id/progress"
+            style="?android:attr/progressBarStyleSmall"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:indeterminate="true"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="10dp"
+            android:layout_weight="1"
+            android:text="@string/ready"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp" />
+    </LinearLayout>
 
     <ScrollView
         android:id="@+id/resultScroll"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="20dp"
+        android:layout_marginTop="10dp"
         android:layout_weight="1"
+        android:background="@drawable/result_panel"
+        android:clipToPadding="false"
         android:fadeScrollbars="false"
         android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:nextFocusDown="@id/apiKeyButton"
+        android:nextFocusUp="@id/queryInput"
+        android:paddingLeft="28dp"
+        android:paddingTop="24dp"
+        android:paddingRight="28dp"
+        android:paddingBottom="26dp"
         android:scrollbars="vertical">
 
         <TextView
             android:id="@+id/resultText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:lineSpacingExtra="8dp"
-            android:paddingBottom="30dp"
-            android:text="Ask something. AISearch will verify live web search before presenting a result as current."
+            android:lineSpacingExtra="7dp"
+            android:text="@string/empty_result"
             android:textColor="@color/text_primary"
             android:textIsSelectable="true"
-            android:textSize="20sp" />
+            android:textSize="19sp" />
     </ScrollView>
 
-    <Button
-        android:id="@+id/apiKeyButton"
-        android:layout_width="110dp"
-        android:layout_height="44dp"
-        android:background="@drawable/focus_button"
-        android:text="@string/api_key"
-        android:textAllCaps="false"
-        android:textColor="@color/text_secondary"
-        android:textSize="14sp" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_marginTop="12dp"
+        android:gravity="end|center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="D-pad: move • OK: select • ↑↓: scroll"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/apiKeyButton"
+            android:layout_width="108dp"
+            android:layout_height="46dp"
+            android:background="@drawable/focus_button"
+            android:nextFocusUp="@id/resultScroll"
+            android:text="@string/api_key"
+            android:textAllCaps="false"
+            android:textColor="@color/button_text"
+            android:textSize="13sp" />
+    </LinearLayout>
 
 </LinearLayout>
