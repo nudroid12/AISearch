@@ -1,1 +1,989 @@
+name: Bootstrap AISearch M1
 
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create AISearch project
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Remove the partial M1 project files, but keep .git and this bootstrap workflow.
+          rm -rf app
+          rm -f build.gradle.kts gradle.properties settings.gradle.kts README.md .gitignore
+
+          mkdir -p app/src/main/java/com/nudroid12/aisearch
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
+
+          cat > .gitignore <<'EOF'
+          .gradle/
+          .idea/
+          local.properties
+          **/build/
+          *.iml
+          .DS_Store
+          EOF
+
+          cat > settings.gradle.kts <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "AISearch"
+          include(":app")
+          EOF
+
+          cat > build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "9.3.1" apply false
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+          }
+
+          android {
+              namespace = "com.nudroid12.aisearch"
+              compileSdk = 36
+
+              defaultConfig {
+                  applicationId = "com.nudroid12.aisearch"
+                  minSdk = 23
+                  targetSdk = 36
+                  versionCode = 1
+                  versionName = "0.1.0"
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.INTERNET" />
+
+              <uses-feature
+                  android:name="android.software.leanback"
+                  android:required="false" />
+              <uses-feature
+                  android:name="android.hardware.touchscreen"
+                  android:required="false" />
+
+              <application
+                  android:allowBackup="false"
+                  android:label="@string/app_name"
+                  android:theme="@style/AppTheme"
+                  android:usesCleartextTraffic="false">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:screenOrientation="landscape">
+
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                      </intent-filter>
+
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+
+          </manifest>
+          EOF
+
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">AISearch</string>
+              <string name="search_hint">Ask anything…</string>
+              <string name="search">Search</string>
+              <string name="voice">Voice</string>
+              <string name="api_key">API Key</string>
+              <string name="live_web">LIVE WEB</string>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/values/colors.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="bg">#101114</color>
+              <color name="panel">#191B20</color>
+              <color name="text_primary">#F5F7FA</color>
+              <color name="text_secondary">#A9AFBA</color>
+              <color name="accent">#E8EAF0</color>
+              <color name="focus_stroke">#FFFFFF</color>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:windowFullscreen">true</item>
+                  <item name="android:navigationBarColor">@color/bg</item>
+                  <item name="android:windowLightNavigationBar">false</item>
+                  <item name="android:colorAccent">@color/accent</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/drawable/focus_button.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <selector xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:state_focused="true">
+                  <shape android:shape="rectangle">
+                      <solid android:color="@color/accent" />
+                      <corners android:radius="14dp" />
+                      <stroke android:width="3dp" android:color="@color/focus_stroke" />
+                  </shape>
+              </item>
+              <item>
+                  <shape android:shape="rectangle">
+                      <solid android:color="@color/panel" />
+                      <corners android:radius="14dp" />
+                      <stroke android:width="1dp" android:color="#3A3E47" />
+                  </shape>
+              </item>
+          </selector>
+          EOF
+
+          cat > app/src/main/res/drawable/search_box.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <selector xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:state_focused="true">
+                  <shape android:shape="rectangle">
+                      <solid android:color="@color/panel" />
+                      <corners android:radius="16dp" />
+                      <stroke android:width="3dp" android:color="@color/focus_stroke" />
+                      <padding
+                          android:left="20dp"
+                          android:top="12dp"
+                          android:right="20dp"
+                          android:bottom="12dp" />
+                  </shape>
+              </item>
+              <item>
+                  <shape android:shape="rectangle">
+                      <solid android:color="@color/panel" />
+                      <corners android:radius="16dp" />
+                      <stroke android:width="1dp" android:color="#3A3E47" />
+                      <padding
+                          android:left="20dp"
+                          android:top="12dp"
+                          android:right="20dp"
+                          android:bottom="12dp" />
+                  </shape>
+              </item>
+          </selector>
+          EOF
+
+          cat > app/src/main/res/layout/activity_main.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:background="@color/bg"
+              android:orientation="vertical"
+              android:paddingLeft="56dp"
+              android:paddingTop="38dp"
+              android:paddingRight="56dp"
+              android:paddingBottom="34dp">
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:gravity="center_vertical"
+                  android:orientation="horizontal">
+
+                  <TextView
+                      android:layout_width="0dp"
+                      android:layout_height="wrap_content"
+                      android:layout_weight="1"
+                      android:text="@string/app_name"
+                      android:textColor="@color/text_primary"
+                      android:textSize="28sp"
+                      android:textStyle="bold" />
+
+                  <TextView
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:background="@drawable/focus_button"
+                      android:paddingLeft="14dp"
+                      android:paddingTop="8dp"
+                      android:paddingRight="14dp"
+                      android:paddingBottom="8dp"
+                      android:text="@string/live_web"
+                      android:textColor="@color/text_primary"
+                      android:textSize="13sp"
+                      android:textStyle="bold" />
+              </LinearLayout>
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="28dp"
+                  android:orientation="horizontal">
+
+                  <EditText
+                      android:id="@+id/queryInput"
+                      android:layout_width="0dp"
+                      android:layout_height="64dp"
+                      android:layout_weight="1"
+                      android:background="@drawable/search_box"
+                      android:hint="@string/search_hint"
+                      android:imeOptions="actionSearch"
+                      android:inputType="text"
+                      android:maxLines="1"
+                      android:nextFocusRight="@id/voiceButton"
+                      android:textColor="@color/text_primary"
+                      android:textColorHint="@color/text_secondary"
+                      android:textSize="20sp" />
+
+                  <Button
+                      android:id="@+id/voiceButton"
+                      android:layout_width="112dp"
+                      android:layout_height="64dp"
+                      android:layout_marginLeft="12dp"
+                      android:background="@drawable/focus_button"
+                      android:nextFocusLeft="@id/queryInput"
+                      android:nextFocusRight="@id/searchButton"
+                      android:text="@string/voice"
+                      android:textAllCaps="false"
+                      android:textColor="@color/text_primary"
+                      android:textSize="17sp" />
+
+                  <Button
+                      android:id="@+id/searchButton"
+                      android:layout_width="128dp"
+                      android:layout_height="64dp"
+                      android:layout_marginLeft="12dp"
+                      android:background="@drawable/focus_button"
+                      android:nextFocusLeft="@id/voiceButton"
+                      android:text="@string/search"
+                      android:textAllCaps="false"
+                      android:textColor="@color/text_primary"
+                      android:textSize="17sp"
+                      android:textStyle="bold" />
+              </LinearLayout>
+
+              <ProgressBar
+                  android:id="@+id/progress"
+                  style="?android:attr/progressBarStyleHorizontal"
+                  android:layout_width="match_parent"
+                  android:layout_height="3dp"
+                  android:layout_marginTop="16dp"
+                  android:indeterminate="true"
+                  android:visibility="gone" />
+
+              <ScrollView
+                  android:id="@+id/resultScroll"
+                  android:layout_width="match_parent"
+                  android:layout_height="0dp"
+                  android:layout_marginTop="20dp"
+                  android:layout_weight="1"
+                  android:fadeScrollbars="false"
+                  android:focusable="true"
+                  android:scrollbars="vertical">
+
+                  <TextView
+                      android:id="@+id/resultText"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:lineSpacingExtra="8dp"
+                      android:paddingBottom="30dp"
+                      android:text="Ask something. AISearch will verify live web search before presenting a result as current."
+                      android:textColor="@color/text_primary"
+                      android:textIsSelectable="true"
+                      android:textSize="20sp" />
+              </ScrollView>
+
+              <Button
+                  android:id="@+id/apiKeyButton"
+                  android:layout_width="110dp"
+                  android:layout_height="44dp"
+                  android:background="@drawable/focus_button"
+                  android:text="@string/api_key"
+                  android:textAllCaps="false"
+                  android:textColor="@color/text_secondary"
+                  android:textSize="14sp" />
+
+          </LinearLayout>
+          EOF
+
+          cat > app/src/main/java/com/nudroid12/aisearch/ApiKeyStore.kt <<'EOF'
+          package com.nudroid12.aisearch
+
+          import android.content.Context
+          import android.security.keystore.KeyGenParameterSpec
+          import android.security.keystore.KeyProperties
+          import android.util.Base64
+          import java.security.KeyStore
+          import javax.crypto.Cipher
+          import javax.crypto.KeyGenerator
+          import javax.crypto.SecretKey
+          import javax.crypto.spec.GCMParameterSpec
+
+          class ApiKeyStore(context: Context) {
+              private val prefs =
+                  context.getSharedPreferences("secure_settings", Context.MODE_PRIVATE)
+              private val alias = "aisearch_groq_key"
+
+              fun save(apiKey: String) {
+                  val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                  cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
+                  val encrypted = cipher.doFinal(apiKey.toByteArray(Charsets.UTF_8))
+
+                  prefs.edit()
+                      .putString(
+                          "key_data",
+                          Base64.encodeToString(encrypted, Base64.NO_WRAP)
+                      )
+                      .putString(
+                          "key_iv",
+                          Base64.encodeToString(cipher.iv, Base64.NO_WRAP)
+                      )
+                      .apply()
+              }
+
+              fun load(): String? {
+                  val data = prefs.getString("key_data", null) ?: return null
+                  val iv = prefs.getString("key_iv", null) ?: return null
+
+                  return try {
+                      val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                      cipher.init(
+                          Cipher.DECRYPT_MODE,
+                          getOrCreateKey(),
+                          GCMParameterSpec(
+                              128,
+                              Base64.decode(iv, Base64.NO_WRAP)
+                          )
+                      )
+                      String(
+                          cipher.doFinal(
+                              Base64.decode(data, Base64.NO_WRAP)
+                          ),
+                          Charsets.UTF_8
+                      )
+                  } catch (_: Exception) {
+                      null
+                  }
+              }
+
+              private fun getOrCreateKey(): SecretKey {
+                  val keyStore =
+                      KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+
+                  (keyStore.getKey(alias, null) as? SecretKey)?.let {
+                      return it
+                  }
+
+                  val generator = KeyGenerator.getInstance(
+                      KeyProperties.KEY_ALGORITHM_AES,
+                      "AndroidKeyStore"
+                  )
+
+                  generator.init(
+                      KeyGenParameterSpec.Builder(
+                          alias,
+                          KeyProperties.PURPOSE_ENCRYPT or
+                              KeyProperties.PURPOSE_DECRYPT
+                      )
+                          .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                          .setEncryptionPaddings(
+                              KeyProperties.ENCRYPTION_PADDING_NONE
+                          )
+                          .build()
+                  )
+
+                  return generator.generateKey()
+              }
+          }
+          EOF
+
+          cat > app/src/main/java/com/nudroid12/aisearch/GroqClient.kt <<'EOF'
+          package com.nudroid12.aisearch
+
+          import org.json.JSONArray
+          import org.json.JSONObject
+          import java.io.BufferedReader
+          import java.net.HttpURLConnection
+          import java.net.URL
+          import java.text.SimpleDateFormat
+          import java.util.Date
+          import java.util.Locale
+
+          data class SearchReply(
+              val text: String,
+              val usedWebSearch: Boolean
+          )
+
+          class GroqClient {
+
+              fun search(apiKey: String, query: String): SearchReply {
+                  val connection =
+                      URL("https://api.groq.com/openai/v1/chat/completions")
+                          .openConnection() as HttpURLConnection
+
+                  connection.requestMethod = "POST"
+                  connection.connectTimeout = 15_000
+                  connection.readTimeout = 60_000
+                  connection.doOutput = true
+                  connection.setRequestProperty(
+                      "Authorization",
+                      "Bearer $apiKey"
+                  )
+                  connection.setRequestProperty(
+                      "Content-Type",
+                      "application/json"
+                  )
+                  connection.setRequestProperty(
+                      "Groq-Model-Version",
+                      "latest"
+                  )
+
+                  val today = SimpleDateFormat(
+                      "yyyy-MM-dd",
+                      Locale.US
+                  ).format(Date())
+
+                  val systemPrompt = """
+                      You are AISearch, a live web search assistant for a TV.
+                      Current device date: $today.
+
+                      Mandatory rules:
+                      1. Use web_search before answering EVERY user query.
+                      2. Never use model memory as the source for facts that may
+                         have changed.
+                      3. Current squads, people in roles, prices, schedules,
+                         releases, news, weather, scores and availability must
+                         be verified from current web results.
+                      4. Prefer recent authoritative sources.
+                      5. If current information cannot be verified, say so.
+                      6. Keep answers concise and easy to read on a television.
+                      7. Reply in the user's language.
+                      8. Include useful source links or citations when available.
+                  """.trimIndent()
+
+                  val body = JSONObject().apply {
+                      put("model", "groq/compound-mini")
+                      put(
+                          "messages",
+                          JSONArray().apply {
+                              put(
+                                  JSONObject().apply {
+                                      put("role", "system")
+                                      put("content", systemPrompt)
+                                  }
+                              )
+                              put(
+                                  JSONObject().apply {
+                                      put("role", "user")
+                                      put("content", query)
+                                  }
+                              )
+                          }
+                      )
+                      put(
+                          "compound_custom",
+                          JSONObject().apply {
+                              put(
+                                  "tools",
+                                  JSONObject().apply {
+                                      put(
+                                          "enabled_tools",
+                                          JSONArray().apply {
+                                              put("web_search")
+                                          }
+                                      )
+                                  }
+                              )
+                          }
+                      )
+                  }
+
+                  connection.outputStream.use { stream ->
+                      stream.write(
+                          body.toString().toByteArray(Charsets.UTF_8)
+                      )
+                  }
+
+                  val status = connection.responseCode
+                  val input = if (status in 200..299) {
+                      connection.inputStream
+                  } else {
+                      connection.errorStream
+                  }
+
+                  val raw = BufferedReader(input.reader()).use {
+                      it.readText()
+                  }
+
+                  if (status !in 200..299) {
+                      val message = try {
+                          JSONObject(raw)
+                              .optJSONObject("error")
+                              ?.optString("message")
+                              ?.takeIf { it.isNotBlank() }
+                      } catch (_: Exception) {
+                          null
+                      }
+
+                      throw IllegalStateException(
+                          message ?: "Groq request failed: HTTP $status"
+                      )
+                  }
+
+                  val response = JSONObject(raw)
+                  val message = response
+                      .getJSONArray("choices")
+                      .getJSONObject(0)
+                      .getJSONObject("message")
+
+                  val content = message.optString("content").trim()
+                  val executedTools =
+                      message.optJSONArray("executed_tools")
+
+                  var usedWebSearch = false
+
+                  if (executedTools != null) {
+                      for (index in 0 until executedTools.length()) {
+                          val item =
+                              executedTools.optJSONObject(index) ?: continue
+
+                          if (
+                              item.optString("type")
+                                  .contains("search", ignoreCase = true)
+                          ) {
+                              usedWebSearch = true
+                              break
+                          }
+                      }
+                  }
+
+                  val finalText = buildString {
+                      if (!usedWebSearch) {
+                          append(
+                              "⚠ Live web search was not confirmed. " +
+                                  "Treat this answer as unverified.\n\n"
+                          )
+                      }
+                      append(
+                          if (content.isNotBlank()) {
+                              content
+                          } else {
+                              "No answer returned."
+                          }
+                      )
+                  }
+
+                  return SearchReply(
+                      text = finalText,
+                      usedWebSearch = usedWebSearch
+                  )
+              }
+          }
+          EOF
+
+          cat > app/src/main/java/com/nudroid12/aisearch/MainActivity.kt <<'EOF'
+          package com.nudroid12.aisearch
+
+          import android.app.Activity
+          import android.app.AlertDialog
+          import android.content.ActivityNotFoundException
+          import android.content.Intent
+          import android.os.Bundle
+          import android.speech.RecognizerIntent
+          import android.text.InputType
+          import android.text.util.Linkify
+          import android.view.KeyEvent
+          import android.view.View
+          import android.view.inputmethod.EditorInfo
+          import android.widget.Button
+          import android.widget.EditText
+          import android.widget.ProgressBar
+          import android.widget.ScrollView
+          import android.widget.TextView
+          import android.widget.Toast
+          import java.util.Locale
+          import java.util.concurrent.Executors
+
+          class MainActivity : Activity() {
+
+              private val executor = Executors.newSingleThreadExecutor()
+              private lateinit var keyStore: ApiKeyStore
+              private lateinit var queryInput: EditText
+              private lateinit var searchButton: Button
+              private lateinit var voiceButton: Button
+              private lateinit var apiKeyButton: Button
+              private lateinit var resultText: TextView
+              private lateinit var resultScroll: ScrollView
+              private lateinit var progress: ProgressBar
+
+              companion object {
+                  private const val VOICE_REQUEST = 501
+              }
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContentView(R.layout.activity_main)
+
+                  keyStore = ApiKeyStore(this)
+                  queryInput = findViewById(R.id.queryInput)
+                  searchButton = findViewById(R.id.searchButton)
+                  voiceButton = findViewById(R.id.voiceButton)
+                  apiKeyButton = findViewById(R.id.apiKeyButton)
+                  resultText = findViewById(R.id.resultText)
+                  resultScroll = findViewById(R.id.resultScroll)
+                  progress = findViewById(R.id.progress)
+
+                  queryInput.setOnEditorActionListener { _, actionId, event ->
+                      val enter =
+                          event?.keyCode == KeyEvent.KEYCODE_ENTER &&
+                              event.action == KeyEvent.ACTION_DOWN
+
+                      if (
+                          actionId == EditorInfo.IME_ACTION_SEARCH ||
+                          enter
+                      ) {
+                          performSearch()
+                          true
+                      } else {
+                          false
+                      }
+                  }
+
+                  searchButton.setOnClickListener {
+                      performSearch()
+                  }
+
+                  voiceButton.setOnClickListener {
+                      startVoiceSearch()
+                  }
+
+                  apiKeyButton.setOnClickListener {
+                      showApiKeyDialog()
+                  }
+
+                  resultText.autoLinkMask = Linkify.WEB_URLS
+                  resultText.linksClickable = true
+
+                  queryInput.requestFocus()
+
+                  if (keyStore.load().isNullOrBlank()) {
+                      showApiKeyDialog(firstRun = true)
+                  }
+              }
+
+              private fun performSearch() {
+                  val query = queryInput.text.toString().trim()
+
+                  if (query.isBlank()) {
+                      queryInput.requestFocus()
+                      return
+                  }
+
+                  val apiKey = keyStore.load()
+
+                  if (apiKey.isNullOrBlank()) {
+                      showApiKeyDialog(firstRun = true)
+                      return
+                  }
+
+                  setLoading(true)
+                  resultText.text = "Searching the live web…"
+                  resultScroll.scrollTo(0, 0)
+
+                  executor.execute {
+                      try {
+                          val reply =
+                              GroqClient().search(apiKey, query)
+
+                          runOnUiThread {
+                              resultText.text = reply.text
+                              Linkify.addLinks(
+                                  resultText,
+                                  Linkify.WEB_URLS
+                              )
+                              resultScroll.scrollTo(0, 0)
+                              setLoading(false)
+                              resultScroll.requestFocus()
+                          }
+                      } catch (error: Exception) {
+                          runOnUiThread {
+                              resultText.text =
+                                  "Search failed.\n\n" +
+                                      (
+                                          error.message
+                                              ?: "Unknown error"
+                                      )
+                              setLoading(false)
+                              searchButton.requestFocus()
+                          }
+                      }
+                  }
+              }
+
+              private fun setLoading(loading: Boolean) {
+                  progress.visibility =
+                      if (loading) View.VISIBLE else View.GONE
+
+                  searchButton.isEnabled = !loading
+                  voiceButton.isEnabled = !loading
+                  queryInput.isEnabled = !loading
+              }
+
+              private fun startVoiceSearch() {
+                  val intent =
+                      Intent(
+                          RecognizerIntent.ACTION_RECOGNIZE_SPEECH
+                      ).apply {
+                          putExtra(
+                              RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                              RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                          )
+                          putExtra(
+                              RecognizerIntent.EXTRA_LANGUAGE,
+                              Locale.getDefault()
+                          )
+                          putExtra(
+                              RecognizerIntent.EXTRA_PROMPT,
+                              "What do you want to search?"
+                          )
+                      }
+
+                  try {
+                      @Suppress("DEPRECATION")
+                      startActivityForResult(
+                          intent,
+                          VOICE_REQUEST
+                      )
+                  } catch (_: ActivityNotFoundException) {
+                      Toast.makeText(
+                          this,
+                          "Voice input is not available on this device.",
+                          Toast.LENGTH_LONG
+                      ).show()
+                  }
+              }
+
+              @Deprecated("Kept for broad Android TV compatibility")
+              override fun onActivityResult(
+                  requestCode: Int,
+                  resultCode: Int,
+                  data: Intent?
+              ) {
+                  super.onActivityResult(
+                      requestCode,
+                      resultCode,
+                      data
+                  )
+
+                  if (
+                      requestCode == VOICE_REQUEST &&
+                      resultCode == RESULT_OK
+                  ) {
+                      val results =
+                          data?.getStringArrayListExtra(
+                              RecognizerIntent.EXTRA_RESULTS
+                          )
+
+                      val text =
+                          results?.firstOrNull()?.trim().orEmpty()
+
+                      if (text.isNotBlank()) {
+                          queryInput.setText(text)
+                          queryInput.setSelection(text.length)
+                          performSearch()
+                      }
+                  }
+              }
+
+              private fun showApiKeyDialog(
+                  firstRun: Boolean = false
+              ) {
+                  val field = EditText(this).apply {
+                      hint = "gsk_..."
+                      inputType =
+                          InputType.TYPE_CLASS_TEXT or
+                              InputType.TYPE_TEXT_VARIATION_PASSWORD
+                      setSingleLine(true)
+                      setPadding(32, 12, 32, 12)
+                  }
+
+                  val dialog =
+                      AlertDialog.Builder(this)
+                          .setTitle("Groq API Key")
+                          .setMessage(
+                              "Enter your Groq API key. It is " +
+                                  "encrypted with Android Keystore " +
+                                  "and stored only on this device."
+                          )
+                          .setView(field)
+                          .setPositiveButton("Save", null)
+                          .setNegativeButton(
+                              if (firstRun) "Later" else "Cancel",
+                              null
+                          )
+                          .create()
+
+                  dialog.setOnShowListener {
+                      dialog
+                          .getButton(AlertDialog.BUTTON_POSITIVE)
+                          .setOnClickListener {
+                              val key =
+                                  field.text.toString().trim()
+
+                              if (key.isBlank()) {
+                                  field.error =
+                                      "API key required"
+                                  return@setOnClickListener
+                              }
+
+                              keyStore.save(key)
+                              dialog.dismiss()
+
+                              Toast.makeText(
+                                  this,
+                                  "API key saved.",
+                                  Toast.LENGTH_SHORT
+                              ).show()
+
+                              queryInput.requestFocus()
+                          }
+                  }
+
+                  dialog.show()
+              }
+
+              override fun onDestroy() {
+                  executor.shutdownNow()
+                  super.onDestroy()
+              }
+          }
+          EOF
+
+          cat > README.md <<'EOF'
+          # AISearch
+
+          AISearch is a deliberately small Android TV app for live AI-assisted
+          web search.
+
+          ## M1
+
+          - One-screen TV interface
+          - D-pad friendly
+          - Text search
+          - Android voice input
+          - Groq `groq/compound-mini`
+          - Only the `web_search` Compound tool is enabled
+          - Every query is instructed to search the live web before answering
+          - The response is marked unverified if `executed_tools` does not
+            confirm a search tool was used
+          - Groq API key is encrypted with Android Keystore and stored only on
+            the device
+          - No account, history, sidebar or unrelated features
+
+          ## First run
+
+          1. Install the APK.
+          2. Enter a Groq API key once.
+          3. Search.
+
+          Package: `com.nudroid12.aisearch`
+          EOF
+
+          echo "AISearch source tree created."
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+      - name: Set up Gradle 9.5.0
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.0"
+
+      - name: Build AISearch debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle :app:assembleDebug --stacktrace
+          test -f app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload AISearch APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AISearch-M1-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Commit AISearch source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No source changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Bootstrap AISearch M1 [skip ci]"
+          git push origin HEAD:main
