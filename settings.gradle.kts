@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TVAISearch"
+rootProject.name = "AISearch"
 include(":app")

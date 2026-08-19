@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AISearch</string>
+    <string name="search_hint">Ask anything…</string>
+    <string name="search">Search</string>
+    <string name="voice">Voice</string>
+    <string name="api_key">API Key</string>
+    <string name="live_web">LIVE WEB</string>
+</resources>
